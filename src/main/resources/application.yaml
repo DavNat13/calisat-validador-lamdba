@@ -1,0 +1,50 @@
+spring:
+  application:
+    name: validador
+  main:
+    # La Lambda no es un servidor: no debe intentar arrancar Tomcat ni el ciclo
+    # de vida de una aplicacion web.
+    web-application-type: none
+    banner-mode: "off"
+
+app:
+  security:
+    jwt:
+      providers:
+        # Microsoft Entra ID (Azure): accesos de la organizacion.
+        - name: azure
+          jwk-set-uri: https://login.microsoftonline.com/e5372bf0-c5e3-4286-887c-79069f209c1f/discovery/v2.0/keys
+          issuers:
+            - https://login.microsoftonline.com/e5372bf0-c5e3-4286-887c-79069f209c1f/v2.0
+          # Entra ID usa el Application ID URI como "aud": se admite el valor
+          # desnudo y el prefijado con "api://" porque segun el flujo de token
+          # (ID token vs. access token) llega en una u otra forma.
+          audiences:
+            - d221f0d2-1a7c-4872-ad6c-367a1f0717ec
+            - api://d221f0d2-1a7c-4872-ad6c-367a1f0717ec
+
+        # AWS Cognito: accesos de usuarios del user pool.
+        - name: cognito
+          jwk-set-uri: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_UK0Q6EmAQ/.well-known/jwks.json
+          issuers:
+            - https://cognito-idp.us-east-1.amazonaws.com/us-east-1_UK0Q6EmAQ
+          # App Client ID del user pool. OJO: en Cognito este valor aparece en el
+          # claim "aud" del ID token, pero en el claim "client_id" del ACCESS token
+          # (por diseno, para que un access token no se pueda usar donde se espera
+          # un ID token). El authorizer acepta cualquiera de los dos.
+          #
+          # No se declara ningun rol por defecto: este authorizer solo comprueba
+          # que el token sea valido. Quien decide sobre roles es el backend.
+          audiences:
+            - 79rbb9f5e2l5nmak9d17ueb2se
+
+logging:
+  level:
+    # Autorizacion: un nivel bajo es un riesgo, no solo ruido.
+    com.lambda.validador: INFO
+    org.springframework.security: INFO
+    # AWSLambdaUtils registra el evento ENTERO en INFO, y el evento del authorizer
+    # lleva el token en claro dos veces: en "identitySource" y en
+    # "headers.authorization". Con este nivel, cada peticion deja un JWT
+    # reutilizable escrito en CloudWatch Logs.
+    org.springframework.cloud.function: WARN

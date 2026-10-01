@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Lambda authorizer (Java 21) para API Gateway HTTP API con autenticacion dual
+  (Microsoft Entra ID + AWS Cognito). Valida el JWT y responde unicamente
+  {"isAuthorized": true|false}. No es un proxy: no devuelve policyDocument,
+  statusCode ni context. Payload 2.0 + respuestas simples.
+
+Parameters:
+  NombreApi:
+    Type: String
+    Default: validador
+    Description: Nombre de la API.
+  RutaProtegida:
+    Type: String
+    Default: /admin
+    Description: Ruta sobre la que se aplica el authorizer.
+  TtlCache:
+    Type: Number
+    Default: 300
+    MinValue: 0
+    MaxValue: 3600
+    Description: >
+      Segundos que API Gateway cachea la decision del authorizer. 0 desactiva la
+      cache y obliga a validar la firma en cada peticion.
+
+Resources:
+  FuncionAuthorizer:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-authorizer'
+      # Artefacto de maven-shade-plugin: clases en la raiz, sin BOOT-INF/lib.
+      # Spring Boot si anidaria las dependencias y el runtime java21 no lo leeria.
+      CodeUri: target/function.jar
+      Runtime: java21
+      # El Handler es propio y a proposito. El FunctionInvoker de Spring Cloud
+      # Function envuelve la salida en el sobre de proxy integration
+      # ({isBase64Encoded, statusCode, body}) en cuanto el evento trae "httpMethod"
+      # o bien "routeKey" y "version", que es justo lo que trae siempre el evento
+      # REQUEST de un authorizer de HTTP API. El sobre hacia que API Gateway
+      # devolviera 500 al no encontrar "isAuthorized" en el nivel superior, y no
+      # hay propiedad para desactivarlo. AuthorizerHandler escribe el JSON plano.
+      Handler: com.lambda.validador.AuthorizerHandler::handleRequest
+      MemorySize: 1024
+      # El arranque en frio lo domina el contexto de Spring, no la validacion.
+      # Mas memoria = mas vCPU = arranque mas rapido.
+      Timeout: 10
+      # El JAR es Java puro, asi que corre igual en Graviton sin recompilar.
+      Architectures: [arm64]
+      Environment:
+        Variables:
+          # Los proveedores se declaran en application.yaml (empaquetado en el JAR)
+          # y se pueden sobreescribir por entorno con relaxed binding, p.ej.
+          # APP_SECURITY_JWT_PROVIDERS_0_JWKSETURI o
+          # APP_SECURITY_JWT_PROVIDERS_1_AUDIENCES_0 (ver README).
+          TZ: UTC
+      # No se declara VPC: la funcion necesita salir a internet para descargar
+      # los JWK Set de los proveedores. Sin VPC, la Lambda tiene egress por
+      # defecto; con VPC, haria falta un NAT Gateway.
+
+  PermisoApiGateway:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt FuncionAuthorizer.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*'
+
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref AWS::StackName
+
+  Ruta:
+    Type: AWS::Serverless::HttpApiRoute
+    Properties:
+      ApiId: !Ref Api
+      Path: !Ref RutaProtegida
+      Method: ANY
+      Auth:
+        # REQUEST = Lambda authorizer propio. Los valores JWT y TOKEN corresponden
+        # a los authorizers gestionados por API Gateway, que no ejecutan
+        # nuestro codigo.
+        AuthorizerType: REQUEST
+        AuthorizerUri: !Sub >-
+          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FuncionAuthorizer.Arn}/invocations
+        # Sin esto el evento llega sin la cabecera y la funcion no puede validar.
+        IdentitySource: $request.header.Authorization
+        # El contrato de la funcion (isAuthorized simple, sin context) solo es
+        # valido con payload 2.0 y respuesta simple habilitada.
+        AuthorizerPayloadFormatVersion: '2.0'
+        EnableSimpleResponses: true
+        AuthorizerResultTtlInSeconds: !Ref TtlCache
+
+Outputs:
+  ApiUrl:
+    Description: URL de la API.
+    Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${AWS::StackName}'
+  AuthorizerArn:
+    Description: ARN de la funcion authorizer.
+    Value: !GetAtt FuncionAuthorizer.Arn
