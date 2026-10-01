@@ -70,16 +70,18 @@ producido desde `target/function.jar`).
 5. **Origen de identidad (Identity source): `$request.header.Authorization`**.
 6. **TTL de caché**: 300 s (opcional; `0` valida la firma en cada petición).
 
-### e) Ruta protegida de ejemplo
-1. **Rutas → Ruta nueva**: método **GET**, ruta **`/admin`** → **Crear ruta**.
-2. En la ruta → **Acciones → Adjuntar autorizador** → el autorizador recién creado.
+### e) Adjuntar el autorizador a las rutas `/api/v1/...`
+1. En **Rutas**, seleccionar cada ruta existente → **Acciones → Adjuntar autorizador** →
+   el autorizador recién creado. Para cubrir toda la API de una vez, fijarlo como
+   **autorizador por defecto ($default)**.
+2. Si alguna ruta debe quedar pública, seleccionarla → **Acciones → Quitar autorizador**.
 
 ### f) Prueba
 ```bash
-API=https://<api-id>.execute-api.us-east-1.amazonaws.com
-curl -i -H "Authorization: Bearer $TOKEN_VALIDO"  $API/admin   # 200 (pasa el backend)
-curl -i -H "Authorization: Bearer $TOKEN_INVALIDO" $API/admin  # 401 (isAuthorized false)
-curl -i $API/admin                                              # 400 (falta cabecera)
+API=https://ho5p58iyu7.execute-api.us-east-1.amazonaws.com
+curl -i -H "Authorization: Bearer $TOKEN_VALIDO"  $API/api/v1/usuarios/perfil   # pasa (llega al backend)
+curl -i -H "Authorization: Bearer $TOKEN_INVALIDO" $API/api/v1/usuarios/perfil  # 401 (isAuthorized false)
+curl -i $API/api/v1/usuarios/perfil                                              # 400 (falta cabecera)
 ```
 
 ## 5. Variables de entorno / proveedores

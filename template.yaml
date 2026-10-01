@@ -13,7 +13,7 @@ Parameters:
     Description: Nombre de la API.
   RutaProtegida:
     Type: String
-    Default: /admin
+    Default: /api/v1/usuarios/perfil
     Description: Ruta sobre la que se aplica el authorizer.
   TtlCache:
     Type: Number

@@ -38,8 +38,8 @@ class AuthorizerHandlerTest {
 
     private byte[] evento() {
         return ("{\"version\":\"2.0\",\"type\":\"REQUEST\","
-                + "\"routeArn\":\"arn:aws:execute-api:us-east-1:123456789012:abcdef/test/GET/admin\","
-                + "\"routeKey\":\"GET /admin\",\"rawPath\":\"/admin\","
+                + "\"routeArn\":\"arn:aws:execute-api:us-east-1:123456789012:abcdef/test/GET/api/v1/usuarios/perfil\","
+                + "\"routeKey\":\"GET /api/v1/usuarios/perfil\",\"rawPath\":\"/api/v1/usuarios/perfil\","
                 + "\"headers\":{\"authorization\":\"Bearer token-ficticio\"},"
                 + "\"requestContext\":{\"stage\":\"test\"}}").getBytes(StandardCharsets.UTF_8);
     }
@@ -82,7 +82,7 @@ class AuthorizerHandlerTest {
         new AuthorizerHandler(evento -> {
             assertThat(evento.getVersion()).isEqualTo("2.0");
             assertThat(evento.getType()).isEqualTo("REQUEST");
-            assertThat(evento.getRouteKey()).isEqualTo("GET /admin");
+            assertThat(evento.getRouteKey()).isEqualTo("GET /api/v1/usuarios/perfil");
             assertThat(evento.getHeaders()).containsEntry("authorization", "Bearer token-ficticio");
             recibido[0] = AuthorizerResult.allowed();
             return recibido[0];
